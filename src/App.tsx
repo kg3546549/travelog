@@ -1,10 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { HashRouter as Router, Routes, Route, useNavigate } from 'react-router-dom'
-import { Plane, Check, Waves, ShoppingBag, DollarSign, ChevronLeft, MapPin, Calendar, ExternalLink, RefreshCw, ChevronDown, ArrowRight } from 'lucide-react'
-import { Badge } from "@/components/ui/badge"
-import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card"
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
-import { Checkbox } from "@/components/ui/checkbox"
+import { Plane, Check, Waves, ShoppingBag, DollarSign, ChevronLeft, MapPin, Calendar, ExternalLink, RefreshCw, ArrowRight } from 'lucide-react'
+import { Accordion, AccordionItem, AccordionTrigger, AccordionContent, Badge, Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter, Tabs, TabsList, TabsTrigger, TabsContent, Checkbox } from "@/components/ui"
 import { cn } from "@/lib/utils"
 
 // --- 실시간 환율 훅 ---
@@ -66,92 +63,77 @@ const flights = [
 ]
 
 function FlightSection() {
-  const [openIndex, setOpenIndex] = useState<number | null>(null)
   return (
     <section>
       <div className="font-mono text-base font-bold text-gray-400 uppercase border-b border-black/5 pb-2 mb-3 flex items-center gap-2">
         <Plane className="w-4 h-4" /> Flight Info
       </div>
       <Card className="rounded-xl border-black/5 overflow-hidden shadow-sm bg-white">
-        <div className="divide-y divide-black/5">
+        <Accordion type="single" collapsible>
           {flights.map((f, i) => {
-            const isOpen = openIndex === i
             const accentBg = f.type === 'out' ? 'bg-teal-50' : 'bg-amber-50'
             const accentText = f.type === 'out' ? 'text-teal-700' : 'text-amber-700'
             return (
-              <div key={i}>
-                {/* 요약 행 */}
-                <button
-                  className="w-full text-left p-5 flex items-center gap-4 hover:bg-gray-50/60 transition-colors"
-                  onClick={() => setOpenIndex(isOpen ? null : i)}
-                >
-                  <div className={cn("w-9 h-9 rounded-full flex items-center justify-center text-xl flex-shrink-0", accentBg)}>
-                    {f.type === 'out' ? '🛫' : '🛬'}
+              <AccordionItem key={i} value={`flight-${i}`} className="border-b border-black/5 last:border-0">
+                <AccordionTrigger className="px-5 py-4 hover:no-underline hover:bg-gray-50/60 [&>svg]:text-gray-300">
+                  <div className="flex items-center gap-4 flex-1 min-w-0">
+                    <div className={cn("w-9 h-9 rounded-full flex items-center justify-center text-xl flex-shrink-0", accentBg)}>
+                      {f.type === 'out' ? '🛫' : '🛬'}
+                    </div>
+                    <div className="flex-grow min-w-0 text-left">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className={cn("text-[11px] font-bold font-mono uppercase", accentText)}>{f.label}</span>
+                        <span className="text-[11px] text-gray-400 font-mono">{f.date}</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-sm font-semibold text-gray-800">
+                        <span>{f.depCode}</span>
+                        <div className="flex items-center gap-1 text-gray-300">
+                          <div className="h-px w-6 bg-gray-200" />
+                          <ArrowRight className="w-3 h-3" />
+                        </div>
+                        <span>{f.arrCode}</span>
+                        {f.arrSuffix && <span className="text-[10px] font-mono text-amber-500 font-bold">{f.arrSuffix}</span>}
+                      </div>
+                      <div className="font-mono text-[11px] text-gray-400 mt-0.5">{f.depTime} → {f.arrTime} · {f.duration} · {f.stops}</div>
+                    </div>
                   </div>
-                  <div className="flex-grow min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className={cn("text-[11px] font-bold font-mono uppercase", accentText)}>{f.label}</span>
-                      <span className="text-[11px] text-gray-400 font-mono">{f.date}</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-sm font-semibold text-gray-800">
-                      <span>{f.depCode}</span>
-                      <div className="flex items-center gap-1 text-gray-300">
-                        <div className="h-px w-6 bg-gray-200" />
-                        <ArrowRight className="w-3 h-3" />
-                      </div>
-                      <span>{f.arrCode}</span>
-                      {f.arrSuffix && <span className="text-[10px] font-mono text-amber-500 font-bold">{f.arrSuffix}</span>}
-                    </div>
-                    <div className="font-mono text-[11px] text-gray-400 mt-0.5">{f.depTime} → {f.arrTime} · {f.duration} · {f.stops}</div>
+                </AccordionTrigger>
+                <AccordionContent className="px-5 pb-5 bg-gray-50/40 border-t border-black/5">
+                  <div className="flex items-center gap-2 mt-4 mb-4">
+                    <Badge className="bg-white border border-black/8 text-gray-600 text-[11px] shadow-none">{f.carrier}</Badge>
+                    <span className="font-mono text-[11px] text-gray-400">{f.flightNo}</span>
                   </div>
-                  <ChevronDown className={cn("w-4 h-4 text-gray-300 flex-shrink-0 transition-transform duration-200", isOpen && "rotate-180")} />
-                </button>
-
-                {/* 세부 정보 */}
-                {isOpen && (
-                  <div className="px-5 pb-5 bg-gray-50/40 border-t border-black/5">
-                    <div className="flex items-center gap-2 mt-4 mb-4">
-                      <Badge className="bg-white border border-black/8 text-gray-600 text-[11px] shadow-none">{f.carrier}</Badge>
-                      <span className="font-mono text-[11px] text-gray-400">{f.flightNo}</span>
+                  <div className="relative pl-4">
+                    <div className="absolute left-[7px] top-3 bottom-3 w-px bg-gray-200" />
+                    <div className="relative flex gap-4 mb-5">
+                      <div className="w-3 h-3 rounded-full bg-teal-400 border-2 border-white ring-1 ring-teal-200 flex-shrink-0 mt-1" />
+                      <div>
+                        <div className="text-sm font-bold text-gray-800">{f.depTime}</div>
+                        <div className="text-[12px] font-mono text-gray-500">{f.depCode} {f.depName}</div>
+                        <div className="text-[11px] text-gray-400 mt-0.5">{f.date} 출발</div>
+                      </div>
                     </div>
-                    <div className="relative pl-4">
-                      {/* 타임라인 선 */}
-                      <div className="absolute left-[7px] top-3 bottom-3 w-px bg-gray-200" />
-                      {/* 출발 */}
-                      <div className="relative flex gap-4 mb-5">
-                        <div className="w-3 h-3 rounded-full bg-teal-400 border-2 border-white ring-1 ring-teal-200 flex-shrink-0 mt-1" />
-                        <div>
-                          <div className="text-sm font-bold text-gray-800">{f.depTime}</div>
-                          <div className="text-[12px] font-mono text-gray-500">{f.depCode} {f.depName}</div>
-                          <div className="text-[11px] text-gray-400 mt-0.5">{f.date} 출발</div>
+                    <div className="relative flex gap-4 mb-5">
+                      <div className="w-3 h-3 flex-shrink-0" />
+                      <div className="text-[11px] font-mono text-gray-400 bg-white border border-black/8 rounded-full px-3 py-1">{f.duration} · {f.stops}</div>
+                    </div>
+                    <div className="relative flex gap-4">
+                      <div className="w-3 h-3 rounded-full bg-amber-400 border-2 border-white ring-1 ring-amber-200 flex-shrink-0 mt-1" />
+                      <div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-sm font-bold text-gray-800">{f.arrTime}</span>
+                          {f.arrSuffix && <span className="text-[10px] font-mono font-bold text-amber-500 bg-amber-50 px-1.5 py-0.5 rounded-full">{f.arrSuffix}</span>}
                         </div>
-                      </div>
-                      {/* 소요 시간 */}
-                      <div className="relative flex gap-4 mb-5">
-                        <div className="w-3 h-3 flex-shrink-0" />
-                        <div className="flex items-center gap-2">
-                          <div className="text-[11px] font-mono text-gray-400 bg-white border border-black/8 rounded-full px-3 py-1">{f.duration} · {f.stops}</div>
-                        </div>
-                      </div>
-                      {/* 도착 */}
-                      <div className="relative flex gap-4">
-                        <div className="w-3 h-3 rounded-full bg-amber-400 border-2 border-white ring-1 ring-amber-200 flex-shrink-0 mt-1" />
-                        <div>
-                          <div className="flex items-center gap-1.5">
-                            <span className="text-sm font-bold text-gray-800">{f.arrTime}</span>
-                            {f.arrSuffix && <span className="text-[10px] font-mono font-bold text-amber-500 bg-amber-50 px-1.5 py-0.5 rounded-full">{f.arrSuffix}</span>}
-                          </div>
-                          <div className="text-[12px] font-mono text-gray-500">{f.arrCode} {f.arrName}</div>
-                          <div className="text-[11px] text-gray-400 mt-0.5">{f.arrDate} 도착</div>
-                        </div>
+                        <div className="text-[12px] font-mono text-gray-500">{f.arrCode} {f.arrName}</div>
+                        <div className="text-[11px] text-gray-400 mt-0.5">{f.arrDate} 도착</div>
                       </div>
                     </div>
                   </div>
-                )}
-              </div>
+                </AccordionContent>
+              </AccordionItem>
             )
           })}
-        </div>
+        </Accordion>
       </Card>
     </section>
   )
