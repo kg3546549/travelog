@@ -126,7 +126,7 @@ function SaipanDetail() {
             <Waves className="w-4 h-4" /> Diving Trip Plan
           </div>
           <h1 className="text-[32px] md:text-[40px] font-bold tracking-tight mb-2">사이판 다이빙 여행</h1>
-          <div className="font-mono text-sm text-white/65 mb-6">2025 · 07. 07 (TUE) — 07. 12 (SUN)</div>
+          <div className="font-mono text-sm text-white/65 mb-6">2026 · 07. 07 (TUE) — 07. 12 (SUN)</div>
           <div className="flex flex-wrap justify-center gap-2">
             <Badge variant="outline" className="bg-white/12 border-white/20 text-white/90 rounded-full px-4 py-1">제주항공 왕복</Badge>
             <Badge variant="outline" className="bg-white/12 border-white/20 text-white/90 rounded-full px-4 py-1">5박 6일</Badge>
@@ -452,13 +452,13 @@ function TripList() {
         </div>
         <Card 
           className="border-none shadow-sm hover:shadow-2xl transition-all duration-500 overflow-hidden cursor-pointer bg-white group hover:-translate-y-2"
-          onClick={() => navigate('/trip/saipan-2025')}
+          onClick={() => navigate('/trip/saipan-2026')}
         >
           <div className="h-4 bg-teal-600 w-full"></div>
           <CardHeader className="pt-8 pb-6">
             <CardTitle className="text-2xl group-hover:text-teal-600 transition-colors mb-2">사이판 다이빙 여행</CardTitle>
             <CardDescription className="font-mono text-xs flex items-center gap-2 text-slate-400">
-              <Calendar className="w-3 h-3" /> 2025.07.07 - 07.12
+              <Calendar className="w-3 h-3" /> 2026.07.07 - 07.12
             </CardDescription>
           </CardHeader>
           <CardContent className="pb-8">
@@ -471,7 +471,7 @@ function TripList() {
           </CardFooter>
         </Card>
         <footer className="text-center text-[10px] text-slate-300 font-mono pt-12">
-          © 2025 TRAVEL PLANNER · ALL RIGHTS RESERVED
+          © 2026 TRAVEL PLANNER · ALL RIGHTS RESERVED
         </footer>
       </div>
     </div>
@@ -484,7 +484,7 @@ function App() {
     <Router>
       <Routes>
         <Route path="/" element={<TripList />} />
-        <Route path="/trip/saipan-2025" element={<SaipanDetail />} />
+        <Route path="/trip/saipan-2026" element={<SaipanDetail />} />
       </Routes>
     </Router>
   )
