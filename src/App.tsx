@@ -289,8 +289,8 @@ function SaipanDetail() {
   }))
 
   useEffect(() => {
-    const COMPACT_ON = 160
-    const COMPACT_OFF = 40
+    const COMPACT_ON = 120
+    const COMPACT_OFF = 8
     let ticking = false
 
     const onScroll = () => {
@@ -379,7 +379,7 @@ function SaipanDetail() {
 
       <main className="w-full max-w-[720px] px-4 pt-8">
         <Tabs defaultValue="overview" className="w-full">
-          <TabsList className="bg-white/90 backdrop-blur border border-black/5 p-1 rounded-full w-full h-auto flex shadow-sm sticky top-2 z-20">
+          <TabsList className="bg-white/90 backdrop-blur border border-black/5 p-1 rounded-full w-full h-auto flex shadow-sm sticky top-[72px] md:top-[84px] z-20">
             <TabsTrigger value="overview" className="flex-1 rounded-full py-2 data-[state=active]:bg-teal-600 data-[state=active]:text-white text-xs md:text-sm">개요</TabsTrigger>
             <TabsTrigger value="settlement" className="flex-1 rounded-full py-2 data-[state=active]:bg-teal-600 data-[state=active]:text-white text-xs md:text-sm">정산</TabsTrigger>
             <TabsTrigger value="plan" className="flex-1 rounded-full py-2 data-[state=active]:bg-teal-600 data-[state=active]:text-white text-xs md:text-sm">일정</TabsTrigger>
