@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { HashRouter as Router, Routes, Route, useNavigate } from 'react-router-dom'
-import { Plane, Check, Waves, ShoppingBag, DollarSign, ChevronLeft, MapPin, Calendar, ExternalLink, RefreshCw, ArrowRight } from 'lucide-react'
+import { Plane, Check, Waves, ShoppingBag, DollarSign, ChevronLeft, MapPin, Calendar, ExternalLink, RefreshCw, ArrowRight, Plus, Trash2 } from 'lucide-react'
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent, Badge, Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter, Tabs, TabsList, TabsTrigger, TabsContent, Checkbox } from "@/components/ui"
 import { cn } from "@/lib/utils"
 
@@ -180,21 +180,58 @@ function PlanCard({ days }: { days: DaySchedule[] }) {
   )
 }
 
+// --- 예산 타입 & 헬퍼 ---
+type SplitType = 'individual' | 'shared'
+type PayStatus = 'paid' | 'settle' | 'unpaid'
+interface BudgetItem {
+  id: string; name: string; usd: number; krw: number; note: string;
+  checked: boolean; split: SplitType; splitCount?: number;
+  payStatus: PayStatus; url?: string; count?: number;
+  advanceUsd: number; advanceKrw: number; // 선납/예약금 (이미 지불한 금액)
+}
+function calcMyShareKrw(item: BudgetItem, rate: number): number {
+  const totalKrw = item.krw > 0 ? item.krw : Math.round(item.usd * (item.count || 1) * rate)
+  return item.split === 'shared' ? Math.round(totalKrw / (item.splitCount || 1)) : totalKrw
+}
+function calcMyAdvanceKrw(item: BudgetItem, rate: number): number {
+  const total = item.advanceKrw + Math.round(item.advanceUsd * rate)
+  return item.split === 'shared' ? Math.round(total / (item.splitCount || 1)) : total
+}
+// 총무가 이 항목에 지출한 전체 금액 (개인 항목이면 × 인원수)
+function calcTotalOutlayKrw(item: BudgetItem, rate: number, memberCount: number): number {
+  const baseKrw = item.krw > 0 ? item.krw : Math.round(item.usd * (item.count || 1) * rate)
+  return item.split === 'shared' ? baseKrw : baseKrw * memberCount
+}
+const PAY_STATUS_CONFIG: Record<PayStatus, { label: string; bg: string; text: string; border: string }> = {
+  paid:   { label: '결제완료', bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-200' },
+  settle: { label: '정산필요', bg: 'bg-amber-50',   text: 'text-amber-700',  border: 'border-amber-200'  },
+  unpaid: { label: '미결제',   bg: 'bg-rose-50',    text: 'text-rose-600',   border: 'border-rose-200'   },
+}
+const PAY_STATUS_CYCLE: Record<PayStatus, PayStatus> = { unpaid: 'paid', paid: 'settle', settle: 'unpaid' }
+
 // --- 상세 페이지 컴포넌트 (사이판) ---
 function SaipanDetail() {
   const navigate = useNavigate();
   const { rate, loading: rateLoading } = useExchangeRate()
   
   // 예산 항목 상태
-  const [budgetItems, setBudgetItems] = useState([
-    { id: 'flight', name: '항공권', usd: 0, krw: 344600, note: '제주항공', checked: true },
-    { id: 'diving_pkg', name: '4박5일 다이빙 패키지', usd: 530, krw: 0, note: '숙박+다이빙 포함', checked: true, url: 'http://prosaipan.com/page_LfEm64' },
-    { id: 'extra_tanks', name: '보트 2회 추가', usd: 160, krw: 0, note: '다이빙 집중 시', checked: true },
-    { id: 'extra_dorm', name: '도미토리 1박 추가', usd: 25, count: 3, krw: 0, note: '7/7 도착일 포함 3박', checked: true },
-    { id: 'gear', name: '장비 렌탈', usd: 90, krw: 0, note: '', checked: true },
-    { id: 'airport_transfer', name: '공항 픽드랍', usd: 17, krw: 0, note: '$50 왕복 · 3인 분담', checked: true },
-    { id: 'pocket', name: '여비 (식비·관광)', usd: 300, krw: 0, note: '식사당 $5~$20', checked: true },
-    { id: 'car', name: '차 렌트 (옵션)', usd: 0, krw: 82610, note: '미정', checked: false },
+  const [budgetItems, setBudgetItems] = useState<BudgetItem[]>([
+    //                                                                                                                                        advanceUsd  advanceKrw
+    { id: 'flight',           name: '항공권',              usd: 0,   krw: 344600, note: '제주항공',            checked: true,  split: 'individual',             payStatus: 'paid',   advanceUsd: 0,   advanceKrw: 344600 }, // 전액 완납
+    { id: 'diving_pkg',       name: '4박5일 다이빙 패키지', usd: 530, krw: 0,      note: '숙박+다이빙 포함',    checked: true,  split: 'individual',             payStatus: 'unpaid', advanceUsd: 106, advanceKrw: 0,     url: 'http://prosaipan.com/page_LfEm64' }, // 예약금 20%
+    { id: 'extra_tanks',      name: '보트 2회 추가',        usd: 160, krw: 0,      note: '다이빙 집중 시',      checked: true,  split: 'individual',             payStatus: 'unpaid', advanceUsd: 32,  advanceKrw: 0      }, // 예약금 20%
+    { id: 'extra_dorm',       name: '도미토리 1박 추가',    usd: 25,  krw: 0,      note: '7/7 도착일 포함 3박', checked: true,  split: 'individual', count: 1,    payStatus: 'unpaid', advanceUsd: 5,   advanceKrw: 0      }, // 예약금 20%
+    { id: 'gear',             name: '장비 렌탈',            usd: 90,  krw: 0,      note: '',                    checked: true,  split: 'individual',             payStatus: 'unpaid', advanceUsd: 0,   advanceKrw: 0      },
+    { id: 'airport_transfer', name: '공항 픽드랍',          usd: 50,  krw: 0,      note: '$50 왕복 · 3인 분담', checked: true,  split: 'shared',   splitCount: 3, payStatus: 'unpaid', advanceUsd: 0,   advanceKrw: 0      },
+    { id: 'pocket',           name: '여비 (식비·관광)',     usd: 300, krw: 0,      note: '식사당 $5~$20',       checked: true,  split: 'individual',             payStatus: 'unpaid', advanceUsd: 0,   advanceKrw: 0      },
+    { id: 'car',              name: '차 렌트 (옵션)',        usd: 0,   krw: 82610,  note: '미정',                checked: false, split: 'shared',   splitCount: 3, payStatus: 'unpaid', advanceUsd: 0,   advanceKrw: 0      },
+  ])
+
+  // 멤버 정산 상태
+  const [members, setMembers] = useState([
+    { id: 'm1', name: '나 (총무)', isMe: true,  settled: true  },
+    { id: 'm2', name: '멤버 2',   isMe: false, settled: false },
+    { id: 'm3', name: '멤버 3',   isMe: false, settled: false },
   ])
 
   // 체크리스트 상태
@@ -215,17 +252,43 @@ function SaipanDetail() {
     setBudgetItems(prev => prev.map(item => item.id === id ? { ...item, checked: !item.checked } : item))
   }
 
+  const cyclePayStatus = (id: string) => {
+    setBudgetItems(prev => prev.map(item => item.id === id ? { ...item, payStatus: PAY_STATUS_CYCLE[item.payStatus] } : item))
+  }
+
   const toggleCheck = (id: number) => {
     setChecklist(prev => prev.map(item => item.id === id ? { ...item, done: !item.done } : item))
   }
 
-  const totalAmount = useMemo(() => {
-    return budgetItems.reduce((acc, item) => {
-      if (!item.checked) return acc;
-      const usdToKrw = (item.usd * (item.count || 1)) * rate;
-      return acc + usdToKrw + (item.krw || 0);
+  const settleSummary = useMemo(() => {
+    const active  = budgetItems.filter(i => i.checked)
+    const mCount  = members.length
+    const perPerson = active.reduce((a, i) => a + calcMyShareKrw(i, rate), 0)
+    // 납입 완료 = 완납 항목 전액 + unpaid 항목의 예약금
+    const confirmedOutlay = active.reduce((a, i) => {
+      if (i.payStatus !== 'unpaid') return a + calcTotalOutlayKrw(i, rate, mCount)
+      const advKrw = i.advanceKrw + Math.round(i.advanceUsd * rate)
+      return a + (i.split === 'individual' ? advKrw * mCount : advKrw)
     }, 0)
-  }, [budgetItems, rate])
+    // 잔금 = unpaid 항목에서 예약금 제외한 나머지
+    const pendingOutlay = active.filter(i => i.payStatus === 'unpaid').reduce((a, i) => {
+      const totalKrw = calcTotalOutlayKrw(i, rate, mCount)
+      const advKrw   = i.advanceKrw + Math.round(i.advanceUsd * rate)
+      const advTotal = i.split === 'individual' ? advKrw * mCount : advKrw
+      return a + Math.max(0, totalKrw - advTotal)
+    }, 0)
+    const perPersonAdv = active.reduce((a, i) => a + calcMyAdvanceKrw(i, rate), 0)
+    const nonMe = members.filter(m => !m.isMe)
+    return {
+      perPerson,
+      perPersonAdv,
+      confirmedOutlay,
+      pendingOutlay,
+      totalOutlay: confirmedOutlay + pendingOutlay,
+      collected:   nonMe.filter(m => m.settled).length * perPerson,
+      outstanding: nonMe.filter(m => !m.settled).length * perPerson,
+    }
+  }, [budgetItems, rate, members])
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col items-center pb-12 w-full animate-in fade-in duration-500">
@@ -251,46 +314,345 @@ function SaipanDetail() {
         <FlightSection />
 
         <section>
-          <div className="flex justify-between items-end mb-3 border-b border-black/5 pb-2 px-1">
+          {/* 헤더 */}
+          <div className="flex justify-between items-center mb-4 border-b border-black/5 pb-2 px-1">
             <div className="font-mono text-base font-bold text-gray-400 uppercase flex items-center gap-2">
-              <DollarSign className="w-4 h-4" /> Budget
+              <DollarSign className="w-4 h-4" /> 정산 현황
             </div>
-            <div className="font-mono text-xs text-gray-400">환율 : ₩{rate.toLocaleString()} / USD</div>
-            {rateLoading && <RefreshCw className="w-3 h-3 animate-spin text-gray-400" />}
+            <div className="flex items-center gap-2">
+              {rateLoading && <RefreshCw className="w-3 h-3 animate-spin text-gray-400" />}
+              <span className="font-mono text-xs text-gray-400">₩{rate.toLocaleString()} / USD</span>
+            </div>
           </div>
-          <Card className="rounded-xl border-black/5 overflow-hidden shadow-sm bg-white overflow-x-auto">
-            <table className="w-full text-[13px]">
-              <thead className="bg-gray-50/50 text-gray-400 font-mono text-[11px] uppercase border-b border-black/5">
-                <tr><th className="p-4 w-10"></th><th className="text-left p-4">항목</th><th className="text-right p-4">USD</th><th className="text-right p-4">KRW (합산)</th></tr>
-              </thead>
-              <tbody className="divide-y divide-black/5">
-                {budgetItems.map((item) => (
-                  <tr key={item.id} className={cn("transition-colors", item.checked ? "bg-white" : "bg-gray-50/50 grayscale opacity-60")}>
-                    <td className="p-4 text-center">
-                      <Checkbox checked={item.checked} onCheckedChange={() => toggleBudgetItem(item.id)} />
-                    </td>
-                    <td className="p-4">
-                      <div className="font-medium flex items-center gap-1">
-                        {item.name}
-                        {item.url && <a href={item.url} target="_blank" rel="noreferrer"><ExternalLink className="w-3 h-3 text-blue-400" /></a>}
+
+          {/* ① 총무 선지출 히어로 카드 */}
+          <div className="bg-teal-900 rounded-2xl p-5 mb-3">
+            <div className="text-[11px] font-mono font-bold text-teal-400 uppercase tracking-widest mb-2">
+              총무 선지출 · {members.length}명 기준
+            </div>
+            <div className="text-[34px] font-bold tracking-tight text-white leading-none mb-4">
+              ₩{Math.round(settleSummary.totalOutlay).toLocaleString()}
+            </div>
+            <div className="flex gap-6">
+              <div>
+                <div className="text-[10px] font-mono text-teal-400 uppercase tracking-wider mb-0.5">납입 완료 (예약금 포함)</div>
+                <div className="text-base font-bold text-white">₩{Math.round(settleSummary.confirmedOutlay).toLocaleString()}</div>
+              </div>
+              <div className="w-px bg-teal-700" />
+              <div>
+                <div className="text-[10px] font-mono text-teal-400 uppercase tracking-wider mb-0.5">잔금 (현장·추후 결제)</div>
+                <div className="text-base font-bold text-teal-300">₩{Math.round(settleSummary.pendingOutlay).toLocaleString()}</div>
+              </div>
+            </div>
+          </div>
+
+          {/* ② 1인 부담 + 미수금 */}
+          <div className="grid grid-cols-2 gap-2 mb-5">
+            <div className="bg-white rounded-xl border border-black/8 p-4 shadow-sm">
+              <div className="text-[10px] font-mono font-bold text-gray-400 uppercase tracking-wider mb-1.5">1인 부담액</div>
+              <div className="text-[22px] font-bold text-gray-800 leading-tight">₩{Math.round(settleSummary.perPerson).toLocaleString()}</div>
+              <div className="text-[10px] font-mono text-gray-400 mt-1">{members.length}명 균등 분담</div>
+            </div>
+            <div className="bg-rose-50 rounded-xl border border-rose-200 p-4">
+              <div className="text-[10px] font-mono font-bold text-rose-500 uppercase tracking-wider mb-1.5">미수금</div>
+              <div className="text-[22px] font-bold text-rose-600 leading-tight">₩{Math.round(settleSummary.outstanding).toLocaleString()}</div>
+              <div className="text-[10px] font-mono text-rose-400 mt-1">
+                {members.filter(m => !m.isMe && !m.settled).length}명 미정산
+                {settleSummary.collected > 0 && <span className="text-emerald-600"> · 수령 ₩{Math.round(settleSummary.collected).toLocaleString()}</span>}
+              </div>
+            </div>
+          </div>
+
+          {/* ③ 멤버별 정산 테이블 */}
+          <div className="mb-6">
+            <div className="flex justify-between items-center mb-2 px-0.5">
+              <span className="text-[10px] font-mono font-bold text-gray-400 uppercase tracking-wider">
+                멤버별 정산 ({members.length}명)
+              </span>
+              <button
+                onClick={() => setMembers(prev => [
+                  ...prev,
+                  { id: `m${Date.now()}`, name: `멤버 ${prev.length + 1}`, isMe: false, settled: false }
+                ])}
+                className="flex items-center gap-1 text-[11px] font-bold text-teal-600 hover:text-teal-700 transition-colors"
+              >
+                <Plus className="w-3 h-3" /> 멤버 추가
+              </button>
+            </div>
+            <Accordion type="multiple" className="space-y-2">
+              {members.map(member => {
+                const netOwed = Math.max(0, settleSummary.perPerson - settleSummary.perPersonAdv)
+                return (
+                  <AccordionItem
+                    key={member.id}
+                    value={member.id}
+                    className="bg-white rounded-xl border border-black/8 shadow-sm overflow-hidden"
+                  >
+                    <AccordionTrigger className="px-4 py-3.5 hover:no-underline hover:bg-gray-50/40 [&>svg]:text-gray-300">
+                      <div className="flex items-center gap-3 flex-1 min-w-0">
+                        <span className="text-xl flex-shrink-0">
+                          {member.isMe ? '👑' : member.settled ? '✅' : '⏳'}
+                        </span>
+                        <div className="flex-grow min-w-0 text-left">
+                          <input
+                            value={member.name}
+                            readOnly={member.isMe}
+                            onChange={(e) => setMembers(prev => prev.map(m => m.id === member.id ? { ...m, name: e.target.value } : m))}
+                            onClick={(e) => e.stopPropagation()}
+                            placeholder="이름 입력"
+                            className={cn(
+                              "bg-transparent font-bold text-[13px] text-gray-800 outline-none w-full max-w-[150px]",
+                              !member.isMe && "border-b border-transparent focus:border-teal-400"
+                            )}
+                          />
+                          <div className="text-[11px] font-mono text-gray-400 mt-0.5 flex items-center gap-1.5 flex-wrap">
+                            <span>₩{Math.round(settleSummary.perPerson).toLocaleString()} 부담</span>
+                            {settleSummary.perPersonAdv > 0 && (
+                              <span className="text-emerald-600">
+                                · 예약금 ₩{Math.round(settleSummary.perPersonAdv).toLocaleString()} 납입
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        {!member.isMe && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setMembers(prev => prev.map(m => m.id === member.id ? { ...m, settled: !m.settled } : m))
+                            }}
+                            className={cn(
+                              "flex-shrink-0 text-[10px] font-bold font-mono rounded-full px-2.5 py-1 border transition-all",
+                              member.settled
+                                ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                : "bg-rose-50 text-rose-600 border-rose-200"
+                            )}
+                          >
+                            {member.settled ? '정산 완료' : '미정산'}
+                          </button>
+                        )}
                       </div>
-                      <div className="text-[11px] text-gray-400">{item.note}</div>
-                    </td>
-                    <td className="p-4 text-right font-mono text-gray-500">
-                      {item.usd > 0 ? `$${(item.usd * (item.count || 1)).toLocaleString()}` : '-'}
-                    </td>
-                    <td className="p-4 text-right font-medium">
-                      {item.krw > 0 ? `₩${item.krw.toLocaleString()}` : `₩${Math.round(item.usd * (item.count || 1) * rate).toLocaleString()}`}
-                    </td>
-                  </tr>
-                ))}
-                <tr className="bg-teal-600 text-white font-bold text-lg">
-                  <td colSpan={3} className="p-5">선택 항목 총 합계</td>
-                  <td className="p-5 text-right font-mono tracking-tighter">₩{Math.round(totalAmount).toLocaleString()}</td>
-                </tr>
-              </tbody>
-            </table>
-          </Card>
+                    </AccordionTrigger>
+
+                    <AccordionContent className="pb-0">
+                      <table className="w-full border-t border-black/5">
+                        <thead>
+                          <tr className="bg-gray-50/80 border-b border-black/5">
+                            <th className="text-left px-4 py-2 text-[10px] font-mono font-bold text-gray-400 uppercase tracking-wide">항목</th>
+                            <th className="text-right px-3 py-2 text-[10px] font-mono font-bold text-gray-400 uppercase tracking-wide">1인 부담</th>
+                            <th className="text-right px-4 py-2 text-[10px] font-mono font-bold text-gray-400 uppercase tracking-wide">납입 현황</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-black/[0.04]">
+                          {budgetItems.filter(i => i.checked).map(item => {
+                            const myShare  = calcMyShareKrw(item, rate)
+                            const myAdv    = calcMyAdvanceKrw(item, rate)
+                            const remKrw   = Math.max(0, myShare - myAdv)
+                            const isShared = item.split === 'shared'
+                            const myUsd    = item.usd > 0
+                              ? (isShared ? Math.round(item.usd / (item.splitCount || 1)) : item.usd)
+                              : 0
+                            const advUsd   = item.advanceUsd > 0
+                              ? (isShared ? Math.round(item.advanceUsd / (item.splitCount || 1)) : item.advanceUsd)
+                              : 0
+                            return (
+                              <tr key={item.id} className="text-[12px]">
+                                <td className="px-4 py-2.5">
+                                  <div className="font-medium text-gray-700">{item.name}</div>
+                                  {isShared && (
+                                    <div className="text-[10px] font-mono text-orange-500">{item.splitCount}인 분담</div>
+                                  )}
+                                </td>
+                                <td className="px-3 py-2.5 text-right font-mono">
+                                  {myUsd > 0 && <div className="text-[10px] text-gray-400">${myUsd}</div>}
+                                  <div className="font-bold text-gray-700">₩{myShare.toLocaleString()}</div>
+                                </td>
+                                <td className="px-4 py-2.5 text-right">
+                                  {myAdv >= myShare && myShare > 0 ? (
+                                    <span className="text-[10px] font-bold font-mono text-emerald-600">완납 ✓</span>
+                                  ) : myAdv > 0 ? (
+                                    <div>
+                                      <div className="text-[10px] font-mono text-emerald-600">
+                                        예약금 {advUsd > 0 ? `$${advUsd}` : `₩${myAdv.toLocaleString()}`} ✓
+                                      </div>
+                                      <div className="text-[10px] font-bold font-mono text-rose-600">
+                                        잔금 ₩{remKrw.toLocaleString()}
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <span className="text-[10px] font-mono text-gray-400">미납</span>
+                                  )}
+                                </td>
+                              </tr>
+                            )
+                          })}
+                        </tbody>
+                        <tfoot>
+                          <tr className="bg-teal-50/60 border-t-2 border-teal-100">
+                            <td className="px-4 py-3 font-bold text-[12px] text-gray-700">합계</td>
+                            <td className="px-3 py-3 text-right font-mono font-bold text-gray-800 text-[13px]">
+                              ₩{Math.round(settleSummary.perPerson).toLocaleString()}
+                            </td>
+                            <td className="px-4 py-3 text-right">
+                              {settleSummary.perPersonAdv > 0 && (
+                                <div className="text-[10px] font-mono text-emerald-600">
+                                  납입 ₩{Math.round(settleSummary.perPersonAdv).toLocaleString()} ✓
+                                </div>
+                              )}
+                              <div className="text-[12px] font-bold font-mono text-rose-600">
+                                {netOwed > 0 ? `₩${Math.round(netOwed).toLocaleString()} 정산 필요` : '완납'}
+                              </div>
+                            </td>
+                          </tr>
+                        </tfoot>
+                      </table>
+                      {!member.isMe && (
+                        <div className="px-4 py-2.5 border-t border-black/5 flex justify-between items-center">
+                          <span className="text-[10px] font-mono text-gray-400">
+                            {member.isMe ? '' : `${member.name}에게 카카오페이 등으로 정산 요청`}
+                          </span>
+                          <button
+                            onClick={() => setMembers(prev => prev.filter(m => m.id !== member.id))}
+                            className="flex items-center gap-1 text-[11px] font-mono text-gray-400 hover:text-rose-500 transition-colors"
+                          >
+                            <Trash2 className="w-3 h-3" /> 멤버 삭제
+                          </button>
+                        </div>
+                      )}
+                    </AccordionContent>
+                  </AccordionItem>
+                )
+              })}
+            </Accordion>
+          </div>
+
+          {/* ④ 지출 내역 리스트 */}
+          <div>
+            <div className="text-[10px] font-mono font-bold text-gray-400 uppercase tracking-wider mb-2 px-0.5">지출 내역</div>
+            <Card className="rounded-xl border-black/5 overflow-hidden shadow-sm bg-white">
+
+              {/* 결제 완료 항목 */}
+              {budgetItems.filter(i => i.checked && i.payStatus !== 'unpaid').map((item) => {
+                const mCount    = members.length
+                const totalOutlay = calcTotalOutlayKrw(item, rate, mCount)
+                const perPerson   = calcMyShareKrw(item, rate)
+                const isShared    = item.split === 'shared'
+                const fullUsd     = item.usd * (item.count || 1)
+                const perPersonUsd = isShared ? Math.round(fullUsd / (item.splitCount || 1)) : fullUsd
+                const totalUsd    = isShared ? fullUsd : fullUsd * mCount
+                const ps = PAY_STATUS_CONFIG[item.payStatus]
+                return (
+                  <div key={item.id} className="flex items-center gap-3 px-4 py-3.5 border-b border-black/5 last:border-0">
+                    <Checkbox checked={item.checked} onCheckedChange={() => toggleBudgetItem(item.id)} className="flex-shrink-0" />
+                    <div className="flex-grow min-w-0">
+                      <div className="flex items-center gap-1.5 flex-wrap mb-0.5">
+                        <span className="text-[13px] font-semibold text-gray-800">{item.name}</span>
+                        {item.url && <a href={item.url} target="_blank" rel="noreferrer"><ExternalLink className="w-3 h-3 text-blue-400" /></a>}
+                        <button onClick={() => cyclePayStatus(item.id)}
+                          className={cn("text-[10px] font-bold font-mono rounded-full px-1.5 py-0.5 border hover:opacity-70 transition-opacity", ps.bg, ps.text, ps.border)}>
+                          {ps.label}
+                        </button>
+                      </div>
+                      <div className="text-[11px] font-mono text-gray-400">
+                        {isShared
+                          ? `${item.splitCount}인 분담 · 1인 ${fullUsd > 0 ? `$${perPersonUsd} (₩${perPerson.toLocaleString()})` : `₩${perPerson.toLocaleString()}`}`
+                          : `${mCount}명 × ${fullUsd > 0 ? `$${perPersonUsd} (₩${perPerson.toLocaleString()})` : `₩${perPerson.toLocaleString()}`}`
+                        }
+                      </div>
+                    </div>
+                    <div className="text-right flex-shrink-0 ml-2">
+                      {fullUsd > 0 && <div className="font-mono text-[11px] text-gray-400">${totalUsd}</div>}
+                      <div className="font-mono text-[14px] font-bold text-gray-800">₩{Math.round(totalOutlay).toLocaleString()}</div>
+                    </div>
+                  </div>
+                )
+              })}
+
+              {/* 결제 예정 헤더 */}
+              {budgetItems.filter(i => i.checked && i.payStatus === 'unpaid').length > 0 && (
+                <div className="px-4 py-2.5 bg-gray-50 border-t border-b border-black/5 flex items-center gap-2">
+                  <span className="text-[10px] font-mono font-bold text-gray-400 uppercase tracking-wider">결제 예정</span>
+                  <span className="text-[10px] font-mono text-gray-300">· 현장 결제 또는 추후 납입</span>
+                </div>
+              )}
+
+              {/* 결제 예정 항목 */}
+              {budgetItems.filter(i => i.checked && i.payStatus === 'unpaid').map((item) => {
+                const mCount      = members.length
+                const totalOutlay = calcTotalOutlayKrw(item, rate, mCount)
+                const perPerson   = calcMyShareKrw(item, rate)
+                const isShared    = item.split === 'shared'
+                const fullUsd     = item.usd * (item.count || 1)
+                const perPersonUsd = isShared ? Math.round(fullUsd / (item.splitCount || 1)) : fullUsd
+                const totalUsd    = isShared ? fullUsd : fullUsd * mCount
+                // 예약금 계산
+                const hasAdv      = item.advanceUsd > 0 || item.advanceKrw > 0
+                const advPersonUsd = item.advanceUsd
+                const remPersonUsd = perPersonUsd - advPersonUsd
+                const advTotalUsd  = isShared ? item.advanceUsd : item.advanceUsd * mCount
+                const remTotalUsd  = totalUsd - advTotalUsd
+                const advKrwTotal  = isShared
+                  ? item.advanceKrw + Math.round(item.advanceUsd * rate)
+                  : (item.advanceKrw + Math.round(item.advanceUsd * rate)) * mCount
+                const remKrwTotal  = Math.max(0, totalOutlay - advKrwTotal)
+                return (
+                  <div key={item.id} className="flex items-start gap-3 px-4 py-3.5 border-b border-black/5 last:border-0">
+                    <Checkbox checked={item.checked} onCheckedChange={() => toggleBudgetItem(item.id)} className="flex-shrink-0 mt-0.5" />
+                    <div className="flex-grow min-w-0">
+                      <div className="flex items-center gap-1.5 flex-wrap mb-0.5">
+                        <span className="text-[13px] font-semibold text-gray-600">{item.name}</span>
+                        {isShared && <span className="text-[10px] font-bold font-mono bg-orange-50 text-orange-600 border border-orange-200 rounded-full px-1.5 py-0.5">{item.splitCount}인 분담</span>}
+                        <button onClick={() => cyclePayStatus(item.id)}
+                          className="text-[10px] font-bold font-mono bg-rose-50 text-rose-600 border border-rose-200 rounded-full px-1.5 py-0.5 hover:opacity-70 transition-opacity">
+                          미결제
+                        </button>
+                      </div>
+                      <div className="text-[11px] font-mono text-gray-400">
+                        {isShared
+                          ? `${item.splitCount}인 분담 · 1인 ${fullUsd > 0 ? `$${perPersonUsd} (₩${perPerson.toLocaleString()})` : `₩${perPerson.toLocaleString()}`}`
+                          : `${mCount}명 × ${fullUsd > 0 ? `$${perPersonUsd}/인 (₩${perPerson.toLocaleString()})` : `₩${perPerson.toLocaleString()}`}`
+                        }
+                      </div>
+                      {hasAdv && (
+                        <div className="flex gap-1.5 mt-1.5 flex-wrap">
+                          <span className="text-[10px] font-bold font-mono bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-md px-1.5 py-0.5">
+                            예약금 {fullUsd > 0 ? `$${advPersonUsd}/인 × ${mCount}명 = $${advTotalUsd}` : `₩${advKrwTotal.toLocaleString()}`} 납입
+                          </span>
+                          <span className="text-[10px] font-bold font-mono bg-rose-50 text-rose-600 border border-rose-200 rounded-md px-1.5 py-0.5">
+                            잔금 {fullUsd > 0 ? `$${remPersonUsd}/인 × ${mCount}명 = $${remTotalUsd}` : `₩${remKrwTotal.toLocaleString()}`} 현장결제
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                    <div className="text-right flex-shrink-0 ml-2">
+                      {fullUsd > 0 && <div className="font-mono text-[11px] text-gray-400">${totalUsd}</div>}
+                      {hasAdv ? (
+                        <>
+                          <div className="font-mono text-[11px] text-emerald-600">${ advTotalUsd > 0 ? `$${advTotalUsd}` : `₩${advKrwTotal.toLocaleString()}`} ✓</div>
+                          <div className="font-mono text-[13px] font-bold text-rose-600">
+                            {remTotalUsd > 0 ? `$${remTotalUsd}` : `₩${remKrwTotal.toLocaleString()}`}
+                          </div>
+                        </>
+                      ) : (
+                        <div className="font-mono text-[14px] font-bold text-gray-500">₩{Math.round(totalOutlay).toLocaleString()}</div>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+
+              {/* 미포함 항목 */}
+              {budgetItems.filter(i => !i.checked).map((item) => (
+                <div key={item.id} className="flex items-center gap-3 px-4 py-3 border-t border-black/5 opacity-35">
+                  <Checkbox checked={false} onCheckedChange={() => toggleBudgetItem(item.id)} className="flex-shrink-0" />
+                  <div className="flex-grow min-w-0">
+                    <span className="text-[12px] font-semibold text-gray-500 line-through">{item.name}</span>
+                    {item.note && <span className="text-[11px] text-gray-400 ml-2">{item.note}</span>}
+                  </div>
+                </div>
+              ))}
+
+            </Card>
+          </div>
         </section>
 
         <section>
